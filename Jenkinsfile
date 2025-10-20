@@ -5,6 +5,15 @@ pipeline {
         IMAGE_NAME = "laravel-kompu"
         CONTAINER_NAME = "laravel_kompu"
     }
+    stage('Check Docker Access') {
+    steps {
+        sh 'echo "Cek versi docker:"'
+        sh 'docker --version || echo "Docker tidak ditemukan"'
+        sh 'echo "Cek status docker-compose:"'
+        sh 'docker compose version || docker-compose version || echo "Docker Compose tidak ditemukan"'
+    }
+}
+
 
     stages {
         stage('Checkout Code') {

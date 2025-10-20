@@ -15,16 +15,15 @@ pipeline {
 
         stage('Build Docker Image') {
             steps {
-                sh 'docker build -t ${IMAGE_NAME} .'
+                sh 'docker-compose build'
             }
         }
 
-        stage('Run Laravel Container') {
+        stage('Run Docker Compose') {
             steps {
                 sh '''
-                docker stop ${CONTAINER_NAME} || true
-                docker rm ${CONTAINER_NAME} || true
-                docker run -d -p 8081:8000 --name ${CONTAINER_NAME} ${IMAGE_NAME}
+                docker-compose down || true
+                docker-compose up -d
                 '''
             }
         }
@@ -38,10 +37,11 @@ pipeline {
 
     post {
         success {
-            echo '✅ Laravel berhasil dijalankan di Docker melalui Jenkins (port 8081)!'
+            echo '✅ Laravel berhasil dijalankan via Docker Compose di port 8081!'
         }
         failure {
-            echo '❌ Build gagal, periksa log di Jenkins console output.'
+            echo '❌ Build gagal, cek log Jenkins console output.'
         }
     }
 }
+

@@ -4,6 +4,7 @@ pipeline {
     environment {
         IMAGE_NAME = "laravel-kompu"
         CONTAINER_NAME = "laravel_kompu"
+        PATH = "/usr/local/bin:/usr/bin:/bin:C:\\Program Files\\Docker\\Docker\\resources\\bin"
     }
     stage('Check Docker Access') {
     steps {

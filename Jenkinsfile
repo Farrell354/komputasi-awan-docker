@@ -12,6 +12,12 @@ pipeline {
                 git 'https://github.com/Farrell354/komputasi-awan-docker.git'
             }
         }
+        stage('Check Docker Access') {
+    steps {
+        sh 'docker ps'
+        sh 'docker-compose version'
+    }
+}
 
         stage('Build Docker Image') {
             steps {

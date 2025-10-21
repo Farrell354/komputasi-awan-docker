@@ -2,52 +2,57 @@ pipeline {
     agent any
 
     environment {
-        IMAGE_NAME = "laravel-kompu"
-        CONTAINER_NAME = "laravel_kompu"
-        PATH = "/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin"
+        IMAGE_NAME = "laravel-app"
+        CONTAINER_NAME = "laravel_app"
     }
 
     stages {
-        stage('Check Docker Access') {
-            steps {
-                sh '''
-                    echo "Cek versi docker:"
-                    docker --version || echo "Docker tidak ditemukan"
-
-                    echo "Cek versi docker-compose:"
-                    docker compose version || docker-compose version || echo "Docker Compose tidak ditemukan"
-                '''
-            }
-        }
-
         stage('Checkout Code') {
             steps {
-                git 'https://github.com/Farrell354/komputasi-awan-docker.git'
+                git branch: 'main', url: 'https://github.com/andrewwanda04/praktikum_cloud_2_web.git'
             }
         }
 
-        stage('Build Docker Image') {
+        stage('Build Docker Images') {
             steps {
-                sh 'docker compose build'
+                bat 'docker-compose build'
             }
         }
 
-        stage('Run Docker Compose') {
+        stage('Run Docker Containers') {
             steps {
-                sh '''
-                    docker compose down || true
-                    docker compose up -d
+                bat '''
+                echo ==== HENTIKAN CONTAINER LAMA ====
+                docker stop laravel_app || echo "laravel_app tidak berjalan"
+                docker rm laravel_app || echo "laravel_app sudah dihapus"
+                docker stop nginx_server || echo "nginx_server tidak berjalan"
+                docker rm nginx_server || echo "nginx_server sudah dihapus"
+                docker stop mysql_db || echo "mysql_db tidak berjalan"
+                docker rm mysql_db || echo "mysql_db sudah dihapus"
+
+                echo ==== JALANKAN ULANG DOCKER COMPOSE ====
+                docker-compose down || exit 0
+                docker-compose up -d
+
+                echo ==== CEK CONTAINER YANG AKTIF ====
+                docker ps
                 '''
             }
         }
 
         stage('Verify Container Running') {
             steps {
-                sh '''
-                    sleep 5
-                    echo "Verifikasi container berjalan..."
-                    docker ps
-                    curl -I http://localhost:8081 || echo "Akses ke http://localhost:8081 gagal"
+                bat '''
+                echo ==== TUNGGU 20 DETIK SUPAYA CONTAINER SIAP ====
+                ping 127.0.0.1 -n 20 >nul
+
+                echo ==== CEK KONEKSI KE LARAVEL ====
+                curl -I http://127.0.0.1:8081 || echo "⚠️ Gagal akses Laravel di port 8081"
+                
+                echo.
+                echo ==== ISI HALAMAN (HARUSNYA MUNCUL 'Halo aku Andrew Wanda') ====
+                curl http://127.0.0.1:8081 || echo "⚠️ Gagal ambil isi halaman"
+                echo ===============================
                 '''
             }
         }
@@ -62,6 +67,3 @@ pipeline {
         }
     }
 }
-
-
-

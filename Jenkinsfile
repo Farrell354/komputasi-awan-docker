@@ -9,7 +9,7 @@ pipeline {
     stages {
         stage('Checkout Code') {
             steps {
-                git branch: 'main', url: 'https://github.com/andrewwanda04/praktikum_cloud_2_web.git'
+                git branch: 'main', url: 'https://github.com/Farrell354/komputasi-awan-docker.git'
             }
         }
 

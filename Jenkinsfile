@@ -2,22 +2,46 @@ pipeline {
     agent any
 
     environment {
-        IMAGE_NAME = "laravel-app"
+        IMAGE_NAME = "farelmario/kompu"     // Docker Hub repo kamu
+        TAG = "latest"
+        VERSION_TAG = "v${env.BUILD_NUMBER}" // Tag unik berdasarkan nomor build
         CONTAINER_NAME = "laravel_app"
     }
 
     stages {
         stage('Checkout Code') {
             steps {
-                echo "🔄 Checkout source code dari repo kamu..."
+                echo "🔄 Checkout source code dari GitHub..."
                 git branch: 'main', url: 'https://github.com/Farrell354/komputasi-awan-docker.git'
             }
         }
 
-        stage('Build Docker Images') {
+        stage('Build Docker Image') {
             steps {
-                echo "🏗️  Build Docker images menggunakan docker-compose..."
-                bat 'docker-compose build'
+                echo "🏗️ Build Docker image..."
+                bat "docker build -t %IMAGE_NAME%:%TAG% ."
+                bat "docker tag %IMAGE_NAME%:%TAG% %IMAGE_NAME%:%VERSION_TAG%"
+            }
+        }
+
+        stage('Push to Docker Hub') {
+            steps {
+                echo "📦 Push image ke Docker Hub..."
+                withCredentials([usernamePassword(credentialsId: 'docker-hub', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                    bat '''
+                    echo ==== LOGIN KE DOCKER HUB ====
+                    echo %DOCKER_PASS% | docker login -u %DOCKER_USER% --password-stdin
+
+                    echo ==== PUSH IMAGE DENGAN TAG 'latest' ====
+                    docker push %IMAGE_NAME%:%TAG%
+
+                    echo ==== PUSH IMAGE DENGAN TAG BUILD NUMBER ====
+                    docker push %IMAGE_NAME%:%VERSION_TAG%
+
+                    echo ==== LOGOUT ====
+                    docker logout
+                    '''
+                }
             }
         }
 
@@ -64,10 +88,13 @@ pipeline {
 
     post {
         success {
-            echo '✅ Laravel berhasil dijalankan via Docker Compose di port 8081!'
+            echo "✅ Build & Push sukses!"
+            echo "Image berhasil di-push ke Docker Hub:"
+            echo " - %IMAGE_NAME%:%TAG%"
+            echo " - %IMAGE_NAME%:%VERSION_TAG%"
         }
         failure {
-            echo '❌ Build gagal, cek log Jenkins console output.'
+            echo "❌ Build gagal. Cek Jenkins console output."
         }
     }
 }

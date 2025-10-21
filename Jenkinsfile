@@ -2,25 +2,57 @@ pipeline {
     agent any
 
     environment {
-        IMAGE_NAME = "laravel-app"
+        IMAGE_NAME = "farrell354/laravel-app"
         CONTAINER_NAME = "laravel_app"
+        REGISTRY_CREDENTIALS = "dockerhub-credentials"
     }
 
     stages {
         stage('Checkout Code') {
             steps {
+                echo '📥 Mengambil source code Laravel dari GitHub...'
                 git branch: 'main', url: 'https://github.com/Farrell354/komputasi-awan-docker.git'
             }
         }
 
         stage('Build Docker Images') {
             steps {
+                echo '⚙️ Membuat Docker images untuk Laravel, Nginx, dan MySQL...'
                 bat 'docker-compose build'
+            }
+        }
+
+        stage('Run Unit Tests (PHPUnit)') {
+            steps {
+                echo '🧪 Menjalankan unit test Laravel menggunakan PHPUnit di container...'
+                bat '''
+                docker-compose run --rm laravel_app vendor\\bin\\phpunit -q || exit /b 1
+                '''
+            }
+        }
+
+        stage('Push Docker Image to Docker Hub') {
+            when {
+                expression { currentBuild.resultIsBetterOrEqualTo('SUCCESS') }
+            }
+            steps {
+                echo '🚀 Push image Laravel ke Docker Hub...'
+                withCredentials([usernamePassword(credentialsId: env.REGISTRY_CREDENTIALS, usernameVariable: 'USER', passwordVariable: 'PASS')]) {
+                    bat """
+                        docker login -u %USER% -p %PASS%
+                        docker tag laravel_app ${env.IMAGE_NAME}:${env.BUILD_NUMBER}
+                        docker push ${env.IMAGE_NAME}:${env.BUILD_NUMBER}
+                        docker tag ${env.IMAGE_NAME}:${env.BUILD_NUMBER} ${env.IMAGE_NAME}:latest
+                        docker push ${env.IMAGE_NAME}:latest
+                        docker logout
+                    """
+                }
             }
         }
 
         stage('Run Docker Containers') {
             steps {
+                echo '🐳 Menjalankan ulang container Laravel melalui Docker Compose...'
                 bat '''
                 echo ==== HENTIKAN CONTAINER LAMA ====
                 docker stop laravel_app || echo "laravel_app tidak berjalan"
@@ -42,17 +74,18 @@ pipeline {
 
         stage('Verify Container Running') {
             steps {
+                echo '🔍 Verifikasi apakah Laravel berjalan dengan benar di port 8081...'
                 bat '''
-                echo ==== TUNGGU 20 DETIK SUPAYA CONTAINER SIAP ====
+                echo ==== TUNGGU 20 DETIK UNTUK SIAP ====
                 ping 127.0.0.1 -n 20 >nul
 
                 echo ==== CEK KONEKSI KE LARAVEL ====
                 curl -I http://127.0.0.1:8081 || echo "⚠️ Gagal akses Laravel di port 8081"
-                
+
                 echo.
-                echo ==== ISI HALAMAN (HARUSNYA MUNCUL 'Halo aku Andrew Wanda') ====
-                curl http://127.0.0.1:8081 || echo "⚠️ Gagal ambil isi halaman"
-                echo ===============================
+                echo ==== CEK ISI HALAMAN ====
+                curl http://127.0.0.1:8081 || echo "⚠️ Tidak bisa ambil isi halaman"
+                echo ==========================================
                 '''
             }
         }
@@ -60,10 +93,13 @@ pipeline {
 
     post {
         success {
-            echo '✅ Laravel berhasil dijalankan via Docker Compose di port 8081!'
+            echo '✅ Pipeline sukses! Laravel berhasil dijalankan di http://127.0.0.1:8081.'
         }
         failure {
-            echo '❌ Build gagal, cek log Jenkins console output.'
+            echo '❌ Pipeline gagal — silakan cek error log di Jenkins console output.'
+        }
+        always {
+            echo '🕓 Pipeline selesai dijalankan.'
         }
     }
 }

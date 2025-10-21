@@ -2,104 +2,95 @@ pipeline {
     agent any
 
     environment {
-        IMAGE_NAME = "farrell354/laravel-app"
-        CONTAINER_NAME = "laravel_app"
-        REGISTRY_CREDENTIALS = "dockerhub-credentials"
+        IMAGE_NAME = 'farrell354/komputasi-awan-docker'   // Nama image kamu di Docker Hub
+        REGISTRY_CREDENTIALS = 'dockerhub-credentials'     // ID credential Docker Hub di Jenkins
     }
 
     stages {
-        stage('Checkout Code') {
+
+        stage('Checkout') {
             steps {
-                echo '📥 Mengambil source code Laravel dari GitHub...'
+                echo '🔄 Checkout source code dari GitHub kamu...'
                 git branch: 'main', url: 'https://github.com/Farrell354/komputasi-awan-docker.git'
             }
         }
 
-        stage('Build Docker Images') {
+        stage('Build Info') {
             steps {
-                echo '⚙️ Membuat Docker images untuk Laravel, Nginx, dan MySQL...'
-                bat 'docker-compose build'
+                bat 'echo 🚀 Mulai proses build pipeline (Windows Host + Docker Only)'
+                bat 'docker --version'
             }
         }
 
-        stage('Run Unit Tests (PHPUnit)') {
+        stage('Build Docker Image') {
             steps {
-                echo '🧪 Menjalankan unit test Laravel menggunakan PHPUnit di container...'
-                bat '''
-                docker-compose run --rm laravel_app vendor\\bin\\phpunit -q || exit /b 1
-                '''
-            }
-        }
-
-        stage('Push Docker Image to Docker Hub') {
-            when {
-                expression { currentBuild.resultIsBetterOrEqualTo('SUCCESS') }
-            }
-            steps {
-                echo '🚀 Push image Laravel ke Docker Hub...'
                 withCredentials([usernamePassword(credentialsId: env.REGISTRY_CREDENTIALS, usernameVariable: 'USER', passwordVariable: 'PASS')]) {
                     bat """
-                        docker login -u %USER% -p %PASS%
-                        docker tag laravel_app ${env.IMAGE_NAME}:${env.BUILD_NUMBER}
-                        docker push ${env.IMAGE_NAME}:${env.BUILD_NUMBER}
-                        docker tag ${env.IMAGE_NAME}:${env.BUILD_NUMBER} ${env.IMAGE_NAME}:latest
-                        docker push ${env.IMAGE_NAME}:latest
-                        docker logout
+                    echo 🔑 Login ke Docker Hub...
+                    docker login -u %USER% -p %PASS%
+
+                    echo 🏗️  Membuat image Docker dari Dockerfile...
+                    docker build -t ${env.IMAGE_NAME}:${env.BUILD_NUMBER} .
+
+                    echo 🚪 Logout dari Docker Hub...
+                    docker logout
                     """
                 }
             }
         }
 
-        stage('Run Docker Containers') {
+        stage('Run Unit Tests (Pytest)') {
             steps {
-                echo '🐳 Menjalankan ulang container Laravel melalui Docker Compose...'
-                bat '''
-                echo ==== HENTIKAN CONTAINER LAMA ====
-                docker stop laravel_app || echo "laravel_app tidak berjalan"
-                docker rm laravel_app || echo "laravel_app sudah dihapus"
-                docker stop nginx_server || echo "nginx_server tidak berjalan"
-                docker rm nginx_server || echo "nginx_server sudah dihapus"
-                docker stop mysql_db || echo "mysql_db tidak berjalan"
-                docker rm mysql_db || echo "mysql_db sudah dihapus"
-
-                echo ==== JALANKAN ULANG DOCKER COMPOSE ====
-                docker-compose down || exit 0
-                docker-compose up -d
-
-                echo ==== CEK CONTAINER YANG AKTIF ====
-                docker ps
-                '''
+                echo '🧪 Menjalankan unit test di dalam container...'
+                bat """
+                docker run --rm ${env.IMAGE_NAME}:${env.BUILD_NUMBER} pytest -q || exit /b 1
+                """
             }
         }
 
-        stage('Verify Container Running') {
+        stage('Push Docker Image') {
+            when {
+                expression { currentBuild.resultIsBetterOrEqualTo('SUCCESS') }
+            }
             steps {
-                echo '🔍 Verifikasi apakah Laravel berjalan dengan benar di port 8081...'
-                bat '''
-                echo ==== TUNGGU 20 DETIK UNTUK SIAP ====
-                ping 127.0.0.1 -n 20 >nul
+                withCredentials([usernamePassword(credentialsId: env.REGISTRY_CREDENTIALS, usernameVariable: 'USER', passwordVariable: 'PASS')]) {
+                    bat """
+                    echo 🔑 Login ke Docker Hub untuk push...
+                    docker login -u %USER% -p %PASS%
 
-                echo ==== CEK KONEKSI KE LARAVEL ====
-                curl -I http://127.0.0.1:8081 || echo "⚠️ Gagal akses Laravel di port 8081"
+                    echo 📤 Push image versi build ke Docker Hub...
+                    docker push ${env.IMAGE_NAME}:${env.BUILD_NUMBER}
 
-                echo.
-                echo ==== CEK ISI HALAMAN ====
-                curl http://127.0.0.1:8081 || echo "⚠️ Tidak bisa ambil isi halaman"
-                echo ==========================================
-                '''
+                    echo 🏷️  Tag image sebagai 'latest' dan push ulang...
+                    docker tag ${env.IMAGE_NAME}:${env.BUILD_NUMBER} ${env.IMAGE_NAME}:latest
+                    docker push ${env.IMAGE_NAME}:latest
+
+                    echo 🚪 Logout dari Docker Hub...
+                    docker logout
+                    """
+                }
+            }
+        }
+
+        stage('Verify Image') {
+            steps {
+                bat """
+                echo 🧾 Menampilkan daftar image yang ada di host...
+                docker images
+                """
             }
         }
     }
 
     post {
         success {
-            echo '✅ Pipeline sukses! Laravel berhasil dijalankan di http://127.0.0.1:8081.'
+            echo '✅ Pipeline sukses — image berhasil dibangun, dites, dan di-push ke Docker Hub.'
         }
         failure {
-            echo '❌ Pipeline gagal — silakan cek error log di Jenkins console output.'
+            echo '❌ Pipeline gagal — periksa error pada tahap sebelumnya.'
         }
         always {
-            echo '🕓 Pipeline selesai dijalankan.'
+            echo '🏁 Pipeline selesai dijalankan.'
         }
     }
 }

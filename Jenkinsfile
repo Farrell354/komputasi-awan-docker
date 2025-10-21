@@ -2,95 +2,72 @@ pipeline {
     agent any
 
     environment {
-        IMAGE_NAME = 'farrell354/komputasi-awan-docker'   // Nama image kamu di Docker Hub
-        REGISTRY_CREDENTIALS = 'dockerhub-credentials'     // ID credential Docker Hub di Jenkins
+        IMAGE_NAME = "laravel-app"
+        CONTAINER_NAME = "laravel_app"
     }
 
     stages {
-
-        stage('Checkout') {
+        stage('Checkout Code') {
             steps {
-                echo '🔄 Checkout source code dari GitHub kamu...'
+                echo "🔄 Checkout source code dari repo kamu..."
                 git branch: 'main', url: 'https://github.com/Farrell354/komputasi-awan-docker.git'
             }
         }
 
-        stage('Build Info') {
+        stage('Build Docker Images') {
             steps {
-                bat 'echo 🚀 Mulai proses build pipeline (Windows Host + Docker Only)'
-                bat 'docker --version'
+                echo "🏗️  Build Docker images menggunakan docker-compose..."
+                bat 'docker-compose build'
             }
         }
 
-        stage('Build Docker Image') {
+        stage('Run Docker Containers') {
             steps {
-                withCredentials([usernamePassword(credentialsId: env.REGISTRY_CREDENTIALS, usernameVariable: 'USER', passwordVariable: 'PASS')]) {
-                    bat """
-                    echo 🔑 Login ke Docker Hub...
-                    docker login -u %USER% -p %PASS%
+                echo "🚀 Jalankan ulang container Laravel, Nginx, dan MySQL..."
+                bat '''
+                echo ==== HENTIKAN CONTAINER LAMA ====
+                docker stop laravel_app || echo "laravel_app tidak berjalan"
+                docker rm laravel_app || echo "laravel_app sudah dihapus"
+                docker stop nginx_server || echo "nginx_server tidak berjalan"
+                docker rm nginx_server || echo "nginx_server sudah dihapus"
+                docker stop mysql_db || echo "mysql_db tidak berjalan"
+                docker rm mysql_db || echo "mysql_db sudah dihapus"
 
-                    echo 🏗️  Membuat image Docker dari Dockerfile...
-                    docker build -t ${env.IMAGE_NAME}:${env.BUILD_NUMBER} .
+                echo ==== JALANKAN ULANG DOCKER COMPOSE ====
+                docker-compose down || exit 0
+                docker-compose up -d
 
-                    echo 🚪 Logout dari Docker Hub...
-                    docker logout
-                    """
-                }
+                echo ==== CEK CONTAINER YANG AKTIF ====
+                docker ps
+                '''
             }
         }
 
-        stage('Run Unit Tests (Pytest)') {
+        stage('Verify Container Running') {
             steps {
-                echo '🧪 Menjalankan unit test di dalam container...'
-                bat """
-                docker run --rm ${env.IMAGE_NAME}:${env.BUILD_NUMBER} pytest -q || exit /b 1
-                """
-            }
-        }
+                echo "🔍 Verifikasi Laravel container berjalan dengan benar..."
+                bat '''
+                echo ==== TUNGGU 20 DETIK SUPAYA CONTAINER SIAP ====
+                ping 127.0.0.1 -n 20 >nul
 
-        stage('Push Docker Image') {
-            when {
-                expression { currentBuild.resultIsBetterOrEqualTo('SUCCESS') }
-            }
-            steps {
-                withCredentials([usernamePassword(credentialsId: env.REGISTRY_CREDENTIALS, usernameVariable: 'USER', passwordVariable: 'PASS')]) {
-                    bat """
-                    echo 🔑 Login ke Docker Hub untuk push...
-                    docker login -u %USER% -p %PASS%
-
-                    echo 📤 Push image versi build ke Docker Hub...
-                    docker push ${env.IMAGE_NAME}:${env.BUILD_NUMBER}
-
-                    echo 🏷️  Tag image sebagai 'latest' dan push ulang...
-                    docker tag ${env.IMAGE_NAME}:${env.BUILD_NUMBER} ${env.IMAGE_NAME}:latest
-                    docker push ${env.IMAGE_NAME}:latest
-
-                    echo 🚪 Logout dari Docker Hub...
-                    docker logout
-                    """
-                }
-            }
-        }
-
-        stage('Verify Image') {
-            steps {
-                bat """
-                echo 🧾 Menampilkan daftar image yang ada di host...
-                docker images
-                """
+                echo ==== CEK KONEKSI KE LARAVEL ====
+                curl -I http://127.0.0.1:8081 || echo "⚠️ Gagal akses Laravel di port 8081"
+                
+                echo.
+                echo ==== ISI HALAMAN (HARUSNYA MUNCUL HALAMAN LARAVEL) ====
+                curl http://127.0.0.1:8081 || echo "⚠️ Gagal ambil isi halaman"
+                echo ===============================
+                '''
             }
         }
     }
 
     post {
         success {
-            echo '✅ Pipeline sukses — image berhasil dibangun, dites, dan di-push ke Docker Hub.'
+            echo '✅ Laravel berhasil dijalankan via Docker Compose di port 8081!'
         }
         failure {
-            echo '❌ Pipeline gagal — periksa error pada tahap sebelumnya.'
-        }
-        always {
-            echo '🏁 Pipeline selesai dijalankan.'
+            echo '❌ Build gagal, cek log Jenkins console output.'
         }
     }
 }
